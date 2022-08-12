@@ -1,5 +1,5 @@
 import asyncio
-import os
+import logging
 import struct
 import sys
 from dataclasses import dataclass
@@ -11,13 +11,17 @@ import prometheus_client as prom
 from bleak import BleakClient
 from wave_reader.wave import WaveDevice
 
+from wave_plus_exporter.sns import SnsWrapper
+
+logger = logging.getLogger(__name__)
+
 SENSOR_RECORD_UUID = "b42e2fc2-ade7-11e4-89d3-123b93f75cba"
 COMMAND_UUID = "b42e2d06-ade7-11e4-89d3-123b93f75cba"
 
 RADON_AVG = prom.Gauge(
     "radon_avg", "Average radon level measured in becquerels per cubic metre"
 )
-TEMPERATURE_AVG = prom.Gauge("temperature_avg", "Average tempature in celcius")
+TEMPERATURE_AVG = prom.Gauge("temperature_avg", "Average temperature in celcius")
 HUMIDITY_AVG = prom.Gauge("humidity_avg", "Average humidity")
 PRESSURE_AVG = prom.Gauge("pressure_avg", "Average pressure")
 CO2_AVG = prom.Gauge("co2_avg", "Average CO2 level")
@@ -131,19 +135,52 @@ class WavePlus(WaveDevice):
         X4_AVG.set(avg([d.x4 for d in data]))
 
 
-async def main(address: str, serial: str):
+async def exporter(config):
+    address = config.get("DeviceAddress")
+    serial = config.get("DeviceSerial")
+    phone_enabled = bool(config.get("PhoneEnabled", False))
+    phone_number = int(config.get("PhoneNumber", 0))
+    sns = SnsWrapper(config)
+
+    if not address or not serial:
+        logger.error("Invalid device address or serial. Check configuration.")
+        sys.exit(1)
+
+    retries = 0
     while True:
         try:
             device = WavePlus.create(address, serial)
             data = await device.get_sensor_values(
-                hours=int(os.environ.get("READING_WINDOW", 12))
+                hours=int(config.get("SensorHourlyWindow", 12))
             )
             device.update_guage(data)
+
+            if not phone_enabled:
+                continue
+
+            radon_average = avg([d.radon for d in data])
+            if radon_average > float(config.get("RadonThreshold", 99.0)):
+                message = f"Radon levels are high ({radon_average}). Open the windows!"
+                logger.info(message)
+
+                if not phone_number:
+                    logger.error("Phone is enabled, but no phone number specified.")
+                    continue
+
+                sns.publish_text_message(f"Wave: {message}")
         except bleak.exc.BleakDBusError:
+            if retries > int(config.get("ConnectionRetries", 3)):
+                logger.error(f"Failed to connect to device {retries} times!")
+                sys.exit(1)
+
+            retries += 1
             continue
-        sleep(int(os.environ.get("UPDATE_DELAY", 12)) * 60 * 60)
+        except Exception as error:
+            logger.error(f"Unhandled exception. {error}")
+            if phone_enabled and phone_number:
+                sns.publish_text_message(
+                    "Wave: Stopping because of a unhandled exception."
+                )
+            sys.exit(1)
 
-
-if __name__ == "__main__":
-    prom.start_http_server(int(os.environ.get("EXPORTER_PORT", 8000)))
-    asyncio.run(main(sys.argv[1], sys.argv[2]))
+        sleep(int(config.get("HourlyUpdateDelay", 6)) * 60 * 60)
