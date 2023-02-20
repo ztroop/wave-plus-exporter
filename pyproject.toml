@@ -1,15 +1,14 @@
 [tool.poetry]
 name = "wave-plus-exporter"
-version = "0.1.0"
+version = "1.0.0"
 description = "Prometheus exporter for Airthings Wave Plus."
 authors = ["Zackary Troop <zack.tro@gmail.com>"]
 license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-wave-reader = "^0.0.10"
+wave-reader = "^1.0.2"
 prometheus-client = "^0.14.1"
-bleak = "^0.14.3"
 boto3 = "^1.24.5"
 
 [tool.poetry.dev-dependencies]

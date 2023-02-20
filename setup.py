@@ -11,9 +11,8 @@ setup(
     long_description_content_type="text/markdown",
     packages=find_packages(exclude=["tests"]),
     install_requires=[
-        "wave-reader>=0.0.10",
+        "wave-reader>=1.0.2",
         "prometheus-client>=0.14.1",
-        "bleak>=0.14.3",
         "boto3>=1.24.5",
     ],
     python_requires=">=3.7.*",

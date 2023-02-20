@@ -4,9 +4,10 @@ import struct
 import sys
 from dataclasses import dataclass
 from time import sleep
-from typing import List
+from typing import List, Tuple, Union
 
 import bleak
+from bleak.exc import BleakError
 import prometheus_client as prom
 from bleak import BleakClient
 from wave_reader.wave import WaveDevice
@@ -31,7 +32,7 @@ X3_AVG = prom.Gauge("x3_avg", "No description")
 X4_AVG = prom.Gauge("x4_avg", "No description")
 
 
-def avg(collection: List):
+def avg(collection: Union[Tuple, List]):
     return sum(collection) / len(collection)
 
 
@@ -49,13 +50,13 @@ class SensorValues:
 
 
 class WavePlus(WaveDevice):
-    async def get_sensor_values(self, hours: int = 48):
+    async def get_hourly_sensor_data(self, hours: int) -> List[SensorValues]:
         async with BleakClient(self.address, timeout=10) as client:
             cmd = struct.pack("<BHHHH", 0x01, 2, 0, hours, 0)
             raw_data = []
 
             if not client.is_connected:
-                return
+                raise BleakError("Client is not connected.")
 
             await client.start_notify(
                 SENSOR_RECORD_UUID, lambda x, y: raw_data.append((x, y))
@@ -79,7 +80,6 @@ class WavePlus(WaveDevice):
     @staticmethod
     def parse_hour_block(raw: bytearray):
         parts = struct.unpack("<8H HH 12H 12B 12H 12H", raw[:104])
-
         unused = [parts[0:8]]
         radon = parts[8:10]
         temp = parts[10:22]
@@ -123,7 +123,7 @@ class WavePlus(WaveDevice):
         )
 
     @staticmethod
-    def update_guage(data: List[SensorValues]):
+    def update_gauge(data: List[SensorValues]):
         RADON_AVG.set(avg([d.radon for d in data]))
         TEMPERATURE_AVG.set(avg([d.temperature for d in data]))
         HUMIDITY_AVG.set(avg([d.humidity for d in data]))
@@ -135,52 +135,48 @@ class WavePlus(WaveDevice):
         X4_AVG.set(avg([d.x4 for d in data]))
 
 
-async def exporter(config):
-    address = config.get("DeviceAddress")
-    serial = config.get("DeviceSerial")
+async def exporter(device, config):
     phone_enabled = bool(config.get("PhoneEnabled", False))
     phone_number = int(config.get("PhoneNumber", 0))
     sns = SnsWrapper(config)
+
+    try:
+        hours = int(config.get("SensorHourlyWindow", 12))
+        data = await device.get_hourly_sensor_data(hours)
+        device.update_guage(data)
+
+        if not phone_enabled or not phone_number:
+            return False
+
+        radon_average = avg([d.radon for d in data])
+        if radon_average > float(config.get("RadonThreshold", 99.9)):
+            message = f"Radon levels are high ({radon_average}). Open the windows!"
+            logger.info(message)
+            sns.publish_text_message(f"Wave: {message}")
+
+    except (bleak.exc.BleakDBusError, bleak.exc.BleakError):
+        logger.error(f"Failed to connect to device!")
+        return True
+    
+    except Exception as error:
+        logger.error(f"Unhandled exception. {error}")
+        sys.exit(1)
+
+    return False
+
+
+async def run_loop(config):
+    address = config.get("DeviceAddress")
+    serial = config.get("DeviceSerial")
 
     if not address or not serial:
         logger.error("Invalid device address or serial. Check configuration.")
         sys.exit(1)
 
-    retries = 0
+    device = WaveDevice.create(address, serial)
+
     while True:
-        try:
-            device = WavePlus.create(address, serial)
-            data = await device.get_sensor_values(
-                hours=int(config.get("SensorHourlyWindow", 12))
-            )
-            device.update_guage(data)
-
-            if not phone_enabled:
-                continue
-
-            radon_average = avg([d.radon for d in data])
-            if radon_average > float(config.get("RadonThreshold", 99.0)):
-                message = f"Radon levels are high ({radon_average}). Open the windows!"
-                logger.info(message)
-
-                if not phone_number:
-                    logger.error("Phone is enabled, but no phone number specified.")
-                    continue
-
-                sns.publish_text_message(f"Wave: {message}")
-        except bleak.exc.BleakDBusError:
-            if retries > int(config.get("ConnectionRetries", 3)):
-                logger.error(f"Failed to connect to device {retries} times!")
-                sys.exit(1)
-
-            retries += 1
-            continue
-        except Exception as error:
-            logger.error(f"Unhandled exception. {error}")
-            if phone_enabled and phone_number:
-                sns.publish_text_message(
-                    "Wave: Stopping because of a unhandled exception."
-                )
-            sys.exit(1)
-
+        running = True
+        while running:
+            running = await exporter(device, config)
         sleep(int(config.get("HourlyUpdateDelay", 6)) * 60 * 60)
