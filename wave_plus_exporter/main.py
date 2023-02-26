@@ -146,7 +146,7 @@ async def exporter(device, config):
         device.update_guage(data)
 
         if not phone_enabled or not phone_number:
-            return False
+            return True
 
         radon_average = avg([d.radon for d in data])
         if radon_average > float(config.get("RadonThreshold", 99.9)):
@@ -156,13 +156,13 @@ async def exporter(device, config):
 
     except (bleak.exc.BleakDBusError, bleak.exc.BleakError):
         logger.error(f"Failed to connect to device!")
-        return True
-    
+        return False
+
     except Exception as error:
         logger.error(f"Unhandled exception. {error}")
         sys.exit(1)
 
-    return False
+    return True
 
 
 async def run_loop(config):
@@ -176,7 +176,9 @@ async def run_loop(config):
     device = WaveDevice.create(address, serial)
 
     while True:
-        running = True
-        while running:
-            running = await exporter(device, config)
+        attempt = False
+        retries = 0
+        while not attempt and retries < 5:
+            attempt = await exporter(device, config)
+            retries += 1
         sleep(int(config.get("HourlyUpdateDelay", 6)) * 60 * 60)

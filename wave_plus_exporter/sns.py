@@ -1,4 +1,6 @@
+from datetime import datetime, timedelta
 import logging
+from typing import Optional
 
 import boto3
 from botocore.exceptions import ClientError
@@ -15,13 +17,17 @@ class SnsWrapper:
             aws_secret_access_key=config.get("AWSSecret"),
         )
         self.phone_number = int(config.get("PhoneNumber", 0))
+        self.last_sent: Optional[datetime] = None
 
-    def publish_text_message(self, message: str) -> str:
+    def publish_text_message(self, message: str) -> Optional[str]:
+        if self.last_sent and datetime.now() < (self.last_sent + timedelta(minutes=5)):
+            return
         try:
             response = self.sns_resource.meta.client.publish(
                 PhoneNumber=self.phone_number, Message=message
             )
             message_id = response["MessageId"]
+            self.last_sent = datetime.now()
             logger.info(f"Published message to {self.phone_number}.")
         except ClientError:
             logger.error(f"Couldn't publish message to {self.phone_number}!")

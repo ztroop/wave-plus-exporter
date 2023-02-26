@@ -3,12 +3,23 @@ from unittest.mock import patch
 from wave_reader.wave import WaveDevice
 from wave_plus_exporter.main import SensorValues, exporter
 
+
 class MockedWave(WaveDevice):
     async def get_hourly_sensor_data(*args):
         return [
-            SensorValues(radon=80, temperature=21, humidity=40, pressure=980, co2=500, voc=90, light=0, x3=0, x4=0)
+            SensorValues(
+                radon=80,
+                temperature=21,
+                humidity=40,
+                pressure=980,
+                co2=500,
+                voc=90,
+                light=0,
+                x3=0,
+                x4=0,
+            )
         ]
-        
+
     def update_guage(*args):
         pass
 
@@ -28,7 +39,7 @@ class TestExporter(IsolatedAsyncioTestCase):
         device = MockedWave.create(config["DeviceAddress"], config["DeviceSerial"])
         ret = await exporter(device, config)
 
-        self.assertFalse(ret)
+        self.assertTrue(ret)
 
     @patch("wave_plus_exporter.main.SnsWrapper", autospec=True)
     @patch("wave_plus_exporter.main.logger")
@@ -46,8 +57,8 @@ class TestExporter(IsolatedAsyncioTestCase):
         device = MockedWave.create(config["DeviceAddress"], config["DeviceSerial"])
         ret = await exporter(device, config)
 
-        expected_msg = 'Radon levels are high (80.0). Open the windows!'
+        expected_msg = "Radon levels are high (80.0). Open the windows!"
 
         logger.info.assert_called_with(expected_msg)
-        sns(config).publish_text_message.assert_called_with(f'Wave: {expected_msg}')
-        self.assertFalse(ret)
+        sns(config).publish_text_message.assert_called_with(f"Wave: {expected_msg}")
+        self.assertTrue(ret)
