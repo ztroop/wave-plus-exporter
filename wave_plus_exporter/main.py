@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import struct
 import sys
 from dataclasses import dataclass
@@ -7,14 +6,13 @@ from time import sleep
 from typing import List, Tuple, Union
 
 import bleak
-from bleak.exc import BleakError
 import prometheus_client as prom
 from bleak import BleakClient
+from bleak.exc import BleakError
+from loguru import logger
 from wave_reader.wave import WaveDevice
 
 from wave_plus_exporter.sms import TwilioWrapper
-
-logger = logging.getLogger(__name__)
 
 SENSOR_RECORD_UUID = "b42e2fc2-ade7-11e4-89d3-123b93f75cba"
 COMMAND_UUID = "b42e2d06-ade7-11e4-89d3-123b93f75cba"
@@ -138,13 +136,16 @@ class WavePlus(WaveDevice):
 async def exporter(device, config):
     phone_enabled = bool(config.get("PhoneEnabled", False))
     phone_number = int(config.get("PhoneNumber", 0))
-    
+
     try:
         hours = int(config.get("SensorHourlyWindow", 12))
         data = await device.get_hourly_sensor_data(hours)
-        device.update_guage(data)
+
+        logger.debug("Updating Prometheus gauges.")
+        device.update_gauge(data)
 
         if not phone_enabled or not phone_number:
+            logger.debug("Phone is disabled or number not set.")
             return True
 
         sms = TwilioWrapper(config)
@@ -173,12 +174,16 @@ async def run_loop(config):
         logger.error("Invalid device address or serial. Check configuration.")
         sys.exit(1)
 
-    device = WaveDevice.create(address, serial)
+    device = WavePlus.create(address, serial)
 
     while True:
         attempt = False
         retries = 0
         while not attempt and retries < 5:
+            logger.info(f"Updating and exporting sensor values. Attempt ({retries}/5)")
             attempt = await exporter(device, config)
             retries += 1
-        sleep(int(config.get("HourlyUpdateDelay", 6)) * 60 * 60)
+
+        sleep_interval = int(config.get("HourlyUpdateDelay", 6))
+        logger.info(f"Sleeping for {sleep_interval} hours.")
+        sleep(sleep_interval * 60 * 60)
