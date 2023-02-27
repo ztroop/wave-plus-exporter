@@ -12,7 +12,7 @@ import prometheus_client as prom
 from bleak import BleakClient
 from wave_reader.wave import WaveDevice
 
-from wave_plus_exporter.sns import SnsWrapper
+from wave_plus_exporter.sms import TwilioWrapper
 
 logger = logging.getLogger(__name__)
 
@@ -138,8 +138,7 @@ class WavePlus(WaveDevice):
 async def exporter(device, config):
     phone_enabled = bool(config.get("PhoneEnabled", False))
     phone_number = int(config.get("PhoneNumber", 0))
-    sns = SnsWrapper(config)
-
+    
     try:
         hours = int(config.get("SensorHourlyWindow", 12))
         data = await device.get_hourly_sensor_data(hours)
@@ -148,11 +147,12 @@ async def exporter(device, config):
         if not phone_enabled or not phone_number:
             return True
 
+        sms = TwilioWrapper(config)
         radon_average = avg([d.radon for d in data])
         if radon_average > float(config.get("RadonThreshold", 99.9)):
             message = f"Radon levels are high ({radon_average}). Open the windows!"
             logger.info(message)
-            sns.publish_text_message(f"Wave: {message}")
+            sms.publish_text_message(f"Wave: {message}")
 
     except (bleak.exc.BleakDBusError, bleak.exc.BleakError):
         logger.error(f"Failed to connect to device!")

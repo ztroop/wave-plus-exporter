@@ -14,6 +14,7 @@ setup(
         "wave-reader>=1.0.2",
         "prometheus-client>=0.14.1",
         "boto3>=1.24.5",
+        "twilio>=7.16.4",
     ],
     python_requires=">=3.7.*",
     classifiers=[

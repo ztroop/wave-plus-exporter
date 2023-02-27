@@ -1,21 +1,16 @@
+from twilio.rest import Client
+
 from datetime import datetime, timedelta
 import logging
 from typing import Optional
 
-import boto3
-from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
 
-class SnsWrapper:
+class TwilioWrapper:
     def __init__(self, config):
-        self.sns_resource = boto3.client(
-            "sns",
-            region_name=config.get("AWSRegion", "ca-central-1"),
-            aws_access_key_id=config.get("AWSKey"),
-            aws_secret_access_key=config.get("AWSSecret"),
-        )
+        self.client = Client(config.get("TwilioAccountSID"), config.get("TwilioToken"))
         self.phone_number = int(config.get("PhoneNumber", 0))
         self.last_sent: Optional[datetime] = None
 
@@ -23,13 +18,10 @@ class SnsWrapper:
         if self.last_sent and datetime.now() < (self.last_sent + timedelta(minutes=5)):
             return
         try:
-            response = self.sns_resource.meta.client.publish(
-                PhoneNumber=self.phone_number, Message=message
-            )
-            message_id = response["MessageId"]
+            sent_message = self.client.messages.create(body=message, to=self.phone_number)
             self.last_sent = datetime.now()
             logger.info(f"Published message to {self.phone_number}.")
-        except ClientError:
+        except Exception:
             logger.error(f"Couldn't publish message to {self.phone_number}!")
         else:
-            return message_id
+            return sent_message.sid

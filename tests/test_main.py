@@ -41,9 +41,9 @@ class TestExporter(IsolatedAsyncioTestCase):
 
         self.assertTrue(ret)
 
-    @patch("wave_plus_exporter.main.SnsWrapper", autospec=True)
+    @patch("wave_plus_exporter.main.TwilioWrapper", autospec=True)
     @patch("wave_plus_exporter.main.logger")
-    async def test_exporter_sns(self, logger, sns):
+    async def test_exporter_sns(self, logger, sms):
         config = {
             "DeviceAddress": "AB:CD:EF:GH:JK",
             "DeviceSerial": "12345678",
@@ -60,5 +60,5 @@ class TestExporter(IsolatedAsyncioTestCase):
         expected_msg = "Radon levels are high (80.0). Open the windows!"
 
         logger.info.assert_called_with(expected_msg)
-        sns(config).publish_text_message.assert_called_with(f"Wave: {expected_msg}")
+        sms(config).publish_text_message.assert_called_with(f"Wave: {expected_msg}")
         self.assertTrue(ret)
