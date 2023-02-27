@@ -134,7 +134,7 @@ class WavePlus(WaveDevice):
 
 
 async def exporter(device, config):
-    phone_enabled = bool(config.get("PhoneEnabled", False))
+    phone_enabled = int(config.get("PhoneEnabled", 0))
     phone_number = int(config.get("PhoneNumber", 0))
 
     try:
