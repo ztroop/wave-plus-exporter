@@ -141,7 +141,7 @@ async def exporter(device, config):
         hours = int(config.get("SensorHourlyWindow", 12))
         data = await device.get_hourly_sensor_data(hours)
 
-        logger.debug("Updating Prometheus gauges.")
+        logger.info("Updating Prometheus gauges.")
         device.update_gauge(data)
 
         if not phone_enabled or not phone_number:
@@ -150,10 +150,15 @@ async def exporter(device, config):
 
         sms = TwilioWrapper(config)
         radon_average = avg([d.radon for d in data])
-        if radon_average > float(config.get("RadonThreshold", 99.9)):
+        radon_threshold = float(config.get("RadonThreshold", 99.9))
+        if radon_average > radon_threshold:
             message = f"Radon levels are high ({radon_average}). Open the windows!"
             logger.info(message)
             sms.publish_text_message(f"Wave: {message}")
+        else:
+            logger.info(
+                f"Radon levels are below threshold. ({radon_average} < {radon_threshold})"
+            )
 
     except (bleak.exc.BleakDBusError, bleak.exc.BleakError):
         logger.error(f"Failed to connect to device!")
