@@ -1,15 +1,18 @@
 import asyncio
-import os
 import struct
 import sys
 from dataclasses import dataclass
 from time import sleep
-from typing import List
+from typing import List, Tuple, Union
 
 import bleak
 import prometheus_client as prom
 from bleak import BleakClient
+from bleak.exc import BleakError
+from loguru import logger
 from wave_reader.wave import WaveDevice
+
+from wave_plus_exporter.sms import TwilioWrapper
 
 SENSOR_RECORD_UUID = "b42e2fc2-ade7-11e4-89d3-123b93f75cba"
 COMMAND_UUID = "b42e2d06-ade7-11e4-89d3-123b93f75cba"
@@ -17,7 +20,7 @@ COMMAND_UUID = "b42e2d06-ade7-11e4-89d3-123b93f75cba"
 RADON_AVG = prom.Gauge(
     "radon_avg", "Average radon level measured in becquerels per cubic metre"
 )
-TEMPERATURE_AVG = prom.Gauge("temperature_avg", "Average tempature in celcius")
+TEMPERATURE_AVG = prom.Gauge("temperature_avg", "Average temperature in celcius")
 HUMIDITY_AVG = prom.Gauge("humidity_avg", "Average humidity")
 PRESSURE_AVG = prom.Gauge("pressure_avg", "Average pressure")
 CO2_AVG = prom.Gauge("co2_avg", "Average CO2 level")
@@ -27,7 +30,7 @@ X3_AVG = prom.Gauge("x3_avg", "No description")
 X4_AVG = prom.Gauge("x4_avg", "No description")
 
 
-def avg(collection: List):
+def avg(collection: Union[Tuple, List]):
     return sum(collection) / len(collection)
 
 
@@ -45,13 +48,13 @@ class SensorValues:
 
 
 class WavePlus(WaveDevice):
-    async def get_sensor_values(self, hours: int = 48):
+    async def get_hourly_sensor_data(self, hours: int) -> List[SensorValues]:
         async with BleakClient(self.address, timeout=10) as client:
             cmd = struct.pack("<BHHHH", 0x01, 2, 0, hours, 0)
             raw_data = []
 
             if not client.is_connected:
-                return
+                raise BleakError("Client is not connected.")
 
             await client.start_notify(
                 SENSOR_RECORD_UUID, lambda x, y: raw_data.append((x, y))
@@ -75,7 +78,6 @@ class WavePlus(WaveDevice):
     @staticmethod
     def parse_hour_block(raw: bytearray):
         parts = struct.unpack("<8H HH 12H 12B 12H 12H", raw[:104])
-
         unused = [parts[0:8]]
         radon = parts[8:10]
         temp = parts[10:22]
@@ -119,7 +121,7 @@ class WavePlus(WaveDevice):
         )
 
     @staticmethod
-    def update_guage(data: List[SensorValues]):
+    def update_gauge(data: List[SensorValues]):
         RADON_AVG.set(avg([d.radon for d in data]))
         TEMPERATURE_AVG.set(avg([d.temperature for d in data]))
         HUMIDITY_AVG.set(avg([d.humidity for d in data]))
@@ -131,19 +133,62 @@ class WavePlus(WaveDevice):
         X4_AVG.set(avg([d.x4 for d in data]))
 
 
-async def main(address: str, serial: str):
-    while True:
-        try:
-            device = WavePlus.create(address, serial)
-            data = await device.get_sensor_values(
-                hours=int(os.environ.get("READING_WINDOW", 12))
+async def exporter(device, config):
+    phone_enabled = int(config.get("PhoneEnabled", 0))
+    phone_number = int(config.get("PhoneNumber", 0))
+
+    try:
+        hours = int(config.get("SensorHourlyWindow", 12))
+        data = await device.get_hourly_sensor_data(hours)
+
+        logger.info("Updating Prometheus gauges.")
+        device.update_gauge(data)
+
+        if not phone_enabled or not phone_number:
+            logger.debug("Phone is disabled or number not set.")
+            return True
+
+        sms = TwilioWrapper(config)
+        radon_average = avg([d.radon for d in data])
+        radon_threshold = float(config.get("RadonThreshold", 99.9))
+        if radon_average > radon_threshold:
+            message = f"Radon levels are high ({radon_average}). Open the windows!"
+            logger.info(message)
+            sms.publish_text_message(f"Wave: {message}")
+        else:
+            logger.info(
+                f"Radon levels are below threshold. ({radon_average} < {radon_threshold})"
             )
-            device.update_guage(data)
-        except bleak.exc.BleakDBusError:
-            continue
-        sleep(int(os.environ.get("UPDATE_DELAY", 12)) * 60 * 60)
+
+    except (bleak.exc.BleakDBusError, bleak.exc.BleakError):
+        logger.error(f"Failed to connect to device!")
+        return False
+
+    except Exception as error:
+        logger.error(f"Unhandled exception. {error}")
+        sys.exit(1)
+
+    return True
 
 
-if __name__ == "__main__":
-    prom.start_http_server(int(os.environ.get("EXPORTER_PORT", 8000)))
-    asyncio.run(main(sys.argv[1], sys.argv[2]))
+async def run_loop(config):
+    address = config.get("DeviceAddress")
+    serial = config.get("DeviceSerial")
+
+    if not address or not serial:
+        logger.error("Invalid device address or serial. Check configuration.")
+        sys.exit(1)
+
+    device = WavePlus.create(address, serial)
+
+    while True:
+        attempt = False
+        retries = 0
+        while not attempt and retries < 5:
+            logger.info(f"Updating and exporting sensor values. Attempt ({retries}/5)")
+            attempt = await exporter(device, config)
+            retries += 1
+
+        sleep_interval = int(config.get("HourlyUpdateDelay", 6))
+        logger.info(f"Sleeping for {sleep_interval} hours.")
+        sleep(sleep_interval * 60 * 60)
