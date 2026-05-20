@@ -1,1 +1,1 @@
-from .main import exporter, run_loop  # noqa: F401
+from .main import APP_REGISTRY, exporter, run_loop  # noqa: F401

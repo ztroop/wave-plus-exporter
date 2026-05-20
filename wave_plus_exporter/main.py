@@ -17,20 +17,23 @@ from wave_plus_exporter.sms import TwilioWrapper
 SENSOR_RECORD_UUID = "b42e2fc2-ade7-11e4-89d3-123b93f75cba"
 COMMAND_UUID = "b42e2d06-ade7-11e4-89d3-123b93f75cba"
 
-RADON_AVG = prom.Gauge(
-    "radon_avg", "Average radon level measured in becquerels per cubic metre"
-)
-TEMPERATURE_AVG = prom.Gauge("temperature_avg", "Average temperature in celcius")
-HUMIDITY_AVG = prom.Gauge("humidity_avg", "Average humidity")
-PRESSURE_AVG = prom.Gauge("pressure_avg", "Average pressure")
-CO2_AVG = prom.Gauge("co2_avg", "Average CO2 level")
-VOC_AVG = prom.Gauge("voc_avg", "Average VOC level")
-AMBIANT_LIGHT_AVG = prom.Gauge("light_avg", "Average light level")
-X3_AVG = prom.Gauge("x3_avg", "No description")
-X4_AVG = prom.Gauge("x4_avg", "No description")
+APP_REGISTRY = prom.CollectorRegistry()
 
-BATTERY_VOLTAGE = prom.Gauge("battery_voltage", "Battery voltage in volts")
-BATTERY_PERCENTAGE = prom.Gauge("battery_percentage", "Battery percentage remaining")
+RADON_AVG = prom.Gauge(
+    "radon_avg", "Average radon level measured in becquerels per cubic metre",
+    registry=APP_REGISTRY
+)
+TEMPERATURE_AVG = prom.Gauge("temperature_avg", "Average temperature in celcius", registry=APP_REGISTRY)
+HUMIDITY_AVG = prom.Gauge("humidity_avg", "Average humidity", registry=APP_REGISTRY)
+PRESSURE_AVG = prom.Gauge("pressure_avg", "Average pressure", registry=APP_REGISTRY)
+CO2_AVG = prom.Gauge("co2_avg", "Average CO2 level", registry=APP_REGISTRY)
+VOC_AVG = prom.Gauge("voc_avg", "Average VOC level", registry=APP_REGISTRY)
+AMBIANT_LIGHT_AVG = prom.Gauge("light_avg", "Average light level", registry=APP_REGISTRY)
+X3_AVG = prom.Gauge("x3_avg", "No description", registry=APP_REGISTRY)
+X4_AVG = prom.Gauge("x4_avg", "No description", registry=APP_REGISTRY)
+
+BATTERY_VOLTAGE = prom.Gauge("battery_voltage", "Battery voltage in volts", registry=APP_REGISTRY)
+BATTERY_PERCENTAGE = prom.Gauge("battery_percentage", "Battery percentage remaining", registry=APP_REGISTRY)
 
 
 def avg(collection: Union[Tuple, List]):

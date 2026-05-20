@@ -3,7 +3,7 @@ import logging
 
 import prometheus_client as prom
 
-from wave_plus_exporter import run_loop
+from wave_plus_exporter import APP_REGISTRY, run_loop
 from wave_plus_exporter.config import load_configuration
 
 logger = logging.getLogger(__name__)
@@ -13,5 +13,5 @@ if __name__ == "__main__":
     listening_port = int(config.get("ListeningPort", 8000))
     logger.info(f"Listening on port {listening_port}.")
 
-    prom.start_http_server(listening_port)
+    prom.start_http_server(listening_port, registry=APP_REGISTRY)
     asyncio.run(run_loop(config))
