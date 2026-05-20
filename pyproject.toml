@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "wave-plus-exporter"
-version = "1.0.0"
+version = "1.1.0"
 description = "Prometheus exporter for Airthings Wave Plus."
 authors = ["Zackary Troop <zack.tro@gmail.com>"]
 license = "MIT"

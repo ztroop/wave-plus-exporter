@@ -3,7 +3,7 @@ from setuptools import find_packages, setup
 setup(
     author="Zackary Troop",
     name="wave-plus-exporter",
-    version="1.0.0",
+    version="1.1.0",
     url="https://github.com/ztroop/wave-plus-exporter",
     license="MIT",
     description="Prometheus exporter for Airthings Wave Plus device with SMS alerting.",
