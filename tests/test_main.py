@@ -1,5 +1,6 @@
 from unittest import IsolatedAsyncioTestCase
 from unittest.mock import patch
+from wave_reader.measure import Battery
 from wave_reader.wave import WaveDevice
 from wave_plus_exporter.main import SensorValues, exporter
 
@@ -20,8 +21,11 @@ class MockedWave(WaveDevice):
             )
         ]
 
-    def update_guage(*args):
+    def update_gauge(*args):
         pass
+
+    async def get_battery(*args):
+        return Battery(voltage=3.0, percentage=100)
 
 
 class TestExporter(IsolatedAsyncioTestCase):

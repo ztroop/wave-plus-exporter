@@ -29,6 +29,9 @@ AMBIANT_LIGHT_AVG = prom.Gauge("light_avg", "Average light level")
 X3_AVG = prom.Gauge("x3_avg", "No description")
 X4_AVG = prom.Gauge("x4_avg", "No description")
 
+BATTERY_VOLTAGE = prom.Gauge("battery_voltage", "Battery voltage in volts")
+BATTERY_PERCENTAGE = prom.Gauge("battery_percentage", "Battery percentage remaining")
+
 
 def avg(collection: Union[Tuple, List]):
     return sum(collection) / len(collection)
@@ -143,6 +146,12 @@ async def exporter(device, config):
 
         logger.info("Updating Prometheus gauges.")
         device.update_gauge(data)
+
+        battery = await device.get_battery()
+        if battery:
+            BATTERY_VOLTAGE.set(battery.voltage)
+            BATTERY_PERCENTAGE.set(battery.percentage)
+            logger.info(f"Battery: {battery.voltage}V ({battery.percentage}%)")
 
         if not phone_enabled or not phone_number:
             logger.debug("Phone is disabled or number not set.")
