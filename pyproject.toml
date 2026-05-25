@@ -9,7 +9,6 @@ license = "MIT"
 python = "^3.10"
 wave-reader = "2.0.1"
 prometheus-client = "^0.14.1"
-twilio = "^7.16.4"
 loguru = "^0.6.0"
 
 [tool.poetry.group.dev.dependencies]

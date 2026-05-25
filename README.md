@@ -1,26 +1,21 @@
 # Wave Plus Exporter
 
-A simple exporter for `Prometheus` to periodically pull sensor data over an extended period of time. A problem I've noticed while trying to read _current values_ from the device every hour, is that it has a significant effect over battery life. The code in this script will make use of _historical_ data over an extended period of time.
+A Prometheus exporter for Airthings Wave Plus devices. It pulls historical sensor data over a configurable window to minimize battery drain from frequent BLE connections.
 
-## Environment
+## Usage
 
-The following environment variables can configure and override the script's defaults.
-- `SensorHourlyWindow` : How far back to pull historical data. Default: 12 (hours)
-- `HourlyUpdateDelay` : How often to update the Guage values for Prometheus. Default: 6 (hours)
-- `RadonThreshold` : The threshold to send notifications. Default: 99.9
-- `ListeningPort` : The port to listen on. Default: 8000
-- `PhoneEnabled` : Whether or not to enable phone notificaitons. Default: 0
-- `PhoneNumber` : Number to receive the notification. Default: 0
-- `DeviceAddress` : The address of the Wave device.
-- `DeviceSerial` : The serial of the Wave device.
-- `TwilioAccountSID` : The Twilio SID to use.
-- `TwilioToken` : The Twilio Token to use.
-- `TwilioSender` : The Twilio phone number to send from.
-
-The configuration file, `wave.ini`, is loaded from either `/etc/wave/wave.ini` or `$HOME/.config/wave.ini`. See `sample.ini` for example.
-
-## Example Usage
-
+```bash
+python scripts/wave-exporter.py \
+  --device AA:BB:CC:DD:EE:FF,1234567890 \
+  --port 8000 \
+  --update-interval 6
 ```
-python scripts/wave-exporter.py
-```
+
+### Arguments
+
+| Flag | Default | Description |
+|---|---|---|
+| `--device` | **required** | `ADDRESS,SERIAL` pair. Repeatable for multiple devices. |
+| `--sensor-hourly-window` | `12` | Hours of historical data to fetch. |
+| `--update-interval` | `6` | How often to poll, in hours. |
+| `--port` | `8000` | Prometheus HTTP server port. |

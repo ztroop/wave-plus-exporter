@@ -1,12 +1,13 @@
 from unittest import IsolatedAsyncioTestCase
-from unittest.mock import patch
+
 from wave_reader.measure import Battery
 from wave_reader.wave import WaveDevice
-from wave_plus_exporter.main import SensorValues, exporter
+
+from wave_plus_exporter.main import SensorValues, Settings, exporter
 
 
 class MockedWave(WaveDevice):
-    async def get_hourly_sensor_data(*args):
+    async def get_hourly_sensor_data(self, *args):
         return [
             SensorValues(
                 radon=80,
@@ -21,48 +22,19 @@ class MockedWave(WaveDevice):
             )
         ]
 
-    def update_gauge(*args):
+    def update_gauge(self, *args):
         pass
 
-    async def get_battery(*args):
+    async def get_battery(self, *args):
         return Battery(voltage=3.0, percentage=100)
 
 
 class TestExporter(IsolatedAsyncioTestCase):
     async def test_exporter(self):
-        config = {
-            "DeviceAddress": "AB:CD:EF:GH:JK",
-            "DeviceSerial": "12345678",
-            "PhoneEnabled": False,
-            "PhoneNumber": 1234567890,
-            "SensorHourlyWindow": 12,
-            "RadonThreshold": 99.0,
-            "ConnectionRetries": 3,
-            "HourlyUpdateWindow": 6,
-        }
-        device = MockedWave.create(config["DeviceAddress"], config["DeviceSerial"])
-        ret = await exporter(device, config)
+        settings = Settings(
+            sensor_hourly_window=12,
+        )
+        device = MockedWave.create("AB:CD:EF:GH:JK", "12345678")
+        ret = await exporter(device, settings)
 
-        self.assertTrue(ret)
-
-    @patch("wave_plus_exporter.main.TwilioWrapper", autospec=True)
-    @patch("wave_plus_exporter.main.logger")
-    async def test_exporter_sns(self, logger, sms):
-        config = {
-            "DeviceAddress": "AB:CD:EF:GH:JK",
-            "DeviceSerial": "12345678",
-            "PhoneEnabled": True,
-            "PhoneNumber": 1234567890,
-            "SensorHourlyWindow": 12,
-            "RadonThreshold": 70.0,
-            "ConnectionRetries": 3,
-            "HourlyUpdateWindow": 6,
-        }
-        device = MockedWave.create(config["DeviceAddress"], config["DeviceSerial"])
-        ret = await exporter(device, config)
-
-        expected_msg = "Radon levels are high (80.0). Open the windows!"
-
-        logger.info.assert_called_with(expected_msg)
-        sms(config).publish_text_message.assert_called_with(f"Wave: {expected_msg}")
         self.assertTrue(ret)
